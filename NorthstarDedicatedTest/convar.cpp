@@ -7,10 +7,8 @@
 #include "sourceinterface.h"
 
 // should this be in modmanager?
-std::unordered_map<std::string, ConVar*> g_CustomConvars; // this is used in modloading code to determine whether we've registered a mod convar already
-
-typedef void (*ConVarConstructorType)(ConVar* pNewVar, const char* name, const char* defaultValue, int flags, const char* helpString);
-ConVarConstructorType conVarConstructor;
+std::unordered_map<std::string, ConVar*>
+	g_CustomConvars; // this is used in modloading code to determine whether we've registered a mod convar already
 
 typedef void (*ConVarRegisterType)(
 	ConVar* pConVar, const char* pszName, const char* pszDefaultValue, int nFlags, const char* pszHelpString, bool bMin, float fMin,
@@ -20,7 +18,7 @@ ConVarRegisterType conVarRegister;
 typedef void (*ConVarMallocType)(void* pConVarMaloc, int a2, int a3);
 ConVarMallocType conVarMalloc;
 
-void* g_pConVar_Vtable  = nullptr;
+void* g_pConVar_Vtable = nullptr;
 void* g_pIConVar_Vtable = nullptr;
 
 typedef bool (*CvarIsFlagSetType)(ConVar* self, int flags);
@@ -31,7 +29,6 @@ CvarIsFlagSetType CvarIsFlagSet;
 //-----------------------------------------------------------------------------
 void InitialiseConVars(HMODULE baseAddress)
 {
-	conVarConstructor = (ConVarConstructorType)((char*)baseAddress + 0x416200);
 	conVarMalloc = (ConVarMallocType)((char*)baseAddress + 0x415C20);
 	conVarRegister = (ConVarRegisterType)((char*)baseAddress + 0x417230);
 
@@ -84,10 +81,10 @@ ConVar::ConVar(
 //-----------------------------------------------------------------------------
 ConVar::~ConVar(void)
 {
-	if (m_pzsCurrentValue)
+	if (m_Value.m_pszString)
 	{
-		delete[] m_pzsCurrentValue;
-		m_pzsCurrentValue = NULL;
+		delete[] m_Value.m_pszString;
+		m_Value.m_pszString = NULL;
 	}
 }
 
@@ -95,73 +92,43 @@ ConVar::~ConVar(void)
 // Purpose: Returns the base ConVar name.
 // Output : const char*
 //-----------------------------------------------------------------------------
-const char* ConVar::GetBaseName(void) const
-{
-	return m_ConCommandBase.m_pszName;
-}
+const char* ConVar::GetBaseName(void) const { return m_ConCommandBase.m_pszName; }
 
 //-----------------------------------------------------------------------------
 // Purpose: Returns the ConVar help text.
 // Output : const char*
 //-----------------------------------------------------------------------------
-const char* ConVar::GetHelpText(void) const
-{
-	return m_ConCommandBase.m_pszHelpString;
-}
+const char* ConVar::GetHelpText(void) const { return m_ConCommandBase.m_pszHelpString; }
 
 //-----------------------------------------------------------------------------
 // Purpose: Add's flags to ConVar.
-// Input  : nFlags - 
+// Input  : nFlags -
 //-----------------------------------------------------------------------------
-void ConVar::AddFlags(int nFlags)
-{
-	m_ConCommandBase.m_nFlags |= nFlags;
-}
+void ConVar::AddFlags(int nFlags) { m_ConCommandBase.m_nFlags |= nFlags; }
 
 //-----------------------------------------------------------------------------
 // Purpose: Removes flags from ConVar.
-// Input  : nFlags - 
+// Input  : nFlags -
 //-----------------------------------------------------------------------------
-void ConVar::RemoveFlags(int nFlags)
-{
-	m_ConCommandBase.m_nFlags &= ~nFlags;
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Checks if ConVar is registered.
-// Output : bool
-//-----------------------------------------------------------------------------
-bool ConVar::IsRegistered(void) const
-{
-	return m_ConCommandBase.m_bRegistered;
-}
+void ConVar::RemoveFlags(int nFlags) { m_ConCommandBase.m_nFlags &= ~nFlags; }
 
 //-----------------------------------------------------------------------------
 // Purpose: Return ConVar value as a boolean.
 // Output : bool
 //-----------------------------------------------------------------------------
-bool ConVar::GetBool(void) const
-{
-	return !!GetInt();
-}
+bool ConVar::GetBool(void) const { return !!GetInt(); }
 
 //-----------------------------------------------------------------------------
 // Purpose: Return ConVar value as a float.
 // Output : float
 //-----------------------------------------------------------------------------
-float ConVar::GetFloat(void) const
-{
-	return m_flValue;
-}
+float ConVar::GetFloat(void) const { return m_Value.m_fValue; }
 
 //-----------------------------------------------------------------------------
 // Purpose: Return ConVar value as an integer.
 // Output : int
 //-----------------------------------------------------------------------------
-int ConVar::GetInt(void) const
-{
-	return m_nValue;
-}
+int ConVar::GetInt(void) const { return m_Value.m_nValue; }
 
 //-----------------------------------------------------------------------------
 // Purpose: Return ConVar value as a color.
@@ -169,7 +136,7 @@ int ConVar::GetInt(void) const
 //-----------------------------------------------------------------------------
 Color ConVar::GetColor(void) const
 {
-	unsigned char* pColorElement = ((unsigned char*)&m_nValue);
+	unsigned char* pColorElement = ((unsigned char*)&m_Value.m_nValue);
 	return Color(pColorElement[0], pColorElement[1], pColorElement[2], pColorElement[3]);
 }
 
@@ -184,29 +151,29 @@ const char* ConVar::GetString(void) const
 		return "FCVAR_NEVER_AS_STRING";
 	}
 
-	char const* str = m_pzsCurrentValue;
+	char const* str = m_Value.m_pszString;
 	return str ? str : "";
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-// Input  : flMinVal - 
+// Purpose:
+// Input  : flMinVal -
 // Output : true if there is a min set.
 //-----------------------------------------------------------------------------
 bool ConVar::GetMin(float& flMinVal) const
 {
-	flMinVal = m_flMinValue;
+	flMinVal = m_fMinVal;
 	return m_bHasMin;
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: 
-// Input  : flMaxVal - 
+// Purpose:
+// Input  : flMaxVal -
 // Output : true if there is a max set.
 //-----------------------------------------------------------------------------
 bool ConVar::GetMax(float& flMaxVal) const
 {
-	flMaxVal = m_flMaxValue;
+	flMaxVal = m_fMaxVal;
 	return m_bHasMax;
 }
 
@@ -214,10 +181,7 @@ bool ConVar::GetMax(float& flMaxVal) const
 // Purpose: returns the min value.
 // Output : float
 //-----------------------------------------------------------------------------
-float ConVar::GetMinValue(void) const
-{
-	return m_flMinValue;
-}
+float ConVar::GetMinValue(void) const { return m_fMinVal; }
 
 //-----------------------------------------------------------------------------
 // Purpose: returns the max value.
@@ -225,34 +189,29 @@ float ConVar::GetMinValue(void) const
 //-----------------------------------------------------------------------------
 float ConVar::GetMaxValue(void) const
 {
-	return m_flMaxValue;;
+	return m_fMaxVal;
+	;
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: checks if ConVar has min value.
 // Output : bool
 //-----------------------------------------------------------------------------
-bool ConVar::HasMin(void) const
-{
-	return m_bHasMin;
-}
+bool ConVar::HasMin(void) const { return m_bHasMin; }
 
 //-----------------------------------------------------------------------------
 // Purpose: checks if ConVar has max value.
 // Output : bool
 //-----------------------------------------------------------------------------
-bool ConVar::HasMax(void) const
-{
-	return m_bHasMax;
-}
+bool ConVar::HasMax(void) const { return m_bHasMax; }
 
 //-----------------------------------------------------------------------------
 // Purpose: sets the ConVar int value.
-// Input  : nValue - 
+// Input  : nValue -
 //-----------------------------------------------------------------------------
 void ConVar::SetValue(int nValue)
 {
-	if (nValue == m_nValue)
+	if (nValue == m_Value.m_nValue)
 	{
 		return;
 	}
@@ -269,25 +228,25 @@ void ConVar::SetValue(int nValue)
 	}
 
 	// Redetermine value.
-	float flOldValue = m_flValue;
-	m_flValue = flValue;
-	m_nValue = nValue;
+	float flOldValue = m_Value.m_fValue;
+	m_Value.m_fValue = flValue;
+	m_Value.m_nValue = nValue;
 
 	if (!(m_ConCommandBase.m_nFlags & FCVAR_NEVER_AS_STRING))
 	{
 		char szTempValue[32];
-		snprintf(szTempValue, sizeof(szTempValue), "%d", m_nValue);
+		snprintf(szTempValue, sizeof(szTempValue), "%d", m_Value.m_nValue);
 		ChangeStringValue(szTempValue, flOldValue);
 	}
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: sets the ConVar float value.
-// Input  : flValue - 
+// Input  : flValue -
 //-----------------------------------------------------------------------------
 void ConVar::SetValue(float flValue)
 {
-	if (flValue == m_flValue)
+	if (flValue == m_Value.m_fValue)
 	{
 		return;
 	}
@@ -299,29 +258,29 @@ void ConVar::SetValue(float flValue)
 	ClampValue(flValue);
 
 	// Redetermine value.
-	float flOldValue = m_flValue;
-	m_flValue = flValue;
-	m_nValue = (int)m_flValue;
+	float flOldValue = m_Value.m_fValue;
+	m_Value.m_fValue = flValue;
+	m_Value.m_nValue = (int)m_Value.m_fValue;
 
 	if (!(m_ConCommandBase.m_nFlags & FCVAR_NEVER_AS_STRING))
 	{
 		char szTempValue[32];
-		snprintf(szTempValue, sizeof(szTempValue), "%f", m_flValue);
+		snprintf(szTempValue, sizeof(szTempValue), "%f", m_Value.m_fValue);
 		ChangeStringValue(szTempValue, flOldValue);
 	}
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: sets the ConVar string value.
-// Input  : *szValue - 
+// Input  : *szValue -
 //-----------------------------------------------------------------------------
 void ConVar::SetValue(const char* pszValue)
 {
-	if (strcmp(this->m_pzsCurrentValue, pszValue) == 0)
+	if (strcmp(this->m_Value.m_pszString, pszValue) == 0)
 	{
 		return;
 	}
-	this->m_pzsCurrentValue = pszValue;
+	this->m_Value.m_pszString = pszValue;
 
 	char szTempValue[32]{};
 	const char* pszNewValue{};
@@ -329,7 +288,7 @@ void ConVar::SetValue(const char* pszValue)
 	// Only valid for root convars.
 	assert(m_pParent == this);
 
-	float flOldValue = m_flValue;
+	float flOldValue = m_Value.m_fValue;
 	pszNewValue = (char*)pszValue;
 	if (!pszNewValue)
 	{
@@ -353,8 +312,8 @@ void ConVar::SetValue(const char* pszValue)
 		}
 
 		// Redetermine value
-		m_flValue = flNewValue;
-		m_nValue = (int)(m_flValue);
+		m_Value.m_fValue = flNewValue;
+		m_Value.m_nValue = (int)(m_Value.m_fValue);
 	}
 
 	if (!(m_ConCommandBase.m_nFlags & FCVAR_NEVER_AS_STRING))
@@ -365,7 +324,7 @@ void ConVar::SetValue(const char* pszValue)
 
 //-----------------------------------------------------------------------------
 // Purpose: sets the ConVar color value.
-// Input  : clValue - 
+// Input  : clValue -
 //-----------------------------------------------------------------------------
 void ConVar::SetValue(Color clValue)
 {
@@ -380,7 +339,7 @@ void ConVar::SetValue(Color clValue)
 		}
 	}
 
-	this->m_pzsCurrentValue = svResult.c_str();
+	this->m_Value.m_pszString = svResult.c_str();
 }
 
 //-----------------------------------------------------------------------------
@@ -391,32 +350,36 @@ void ConVar::ChangeStringValue(const char* pszTempVal, float flOldValue)
 {
 	assert(!(m_ConCommandBase.m_nFlags & FCVAR_NEVER_AS_STRING));
 
-	char* pszOldValue = (char*)_malloca(m_iStringLength);
+	char* pszOldValue = (char*)_malloca(m_Value.m_iStringLength);
 	if (pszOldValue != NULL)
 	{
-		memcpy(pszOldValue, m_pzsCurrentValue, m_iStringLength);
+		memcpy(pszOldValue, m_Value.m_pszString, m_Value.m_iStringLength);
 	}
 
 	if (pszTempVal)
 	{
 		int len = strlen(pszTempVal) + 1;
 
-		if (len > m_iStringLength)
+		if (len > m_Value.m_iStringLength)
 		{
-			if (m_pzsCurrentValue)
+			if (m_Value.m_pszString)
 			{
-				delete[] m_pzsCurrentValue;
+				// !TODO: Causes issues in tier0.dll, but doesn't in apex.
+				// Not a big issue since we are creating a new string below
+				// anyways to prevent buffer overflow if string is longer
+				// then the old string.
+				// delete[] m_Value.m_pszString;
 			}
 
-			m_pzsCurrentValue = new char[len];
-			m_iStringLength = len;
+			m_Value.m_pszString = new char[len];
+			m_Value.m_iStringLength = len;
 		}
 
-		memcpy((char*)m_pzsCurrentValue, pszTempVal, len);
+		memcpy((char*)m_Value.m_pszString, pszTempVal, len);
 	}
 	else
 	{
-		m_pzsCurrentValue = NULL;
+		m_Value.m_pszString = NULL;
 	}
 
 	pszOldValue = 0;
@@ -424,7 +387,7 @@ void ConVar::ChangeStringValue(const char* pszTempVal, float flOldValue)
 
 //-----------------------------------------------------------------------------
 // Purpose: sets the ConVar color value from string.
-// Input  : *pszValue - 
+// Input  : *pszValue -
 //-----------------------------------------------------------------------------
 bool ConVar::SetColorFromString(const char* pszValue)
 {
@@ -443,30 +406,40 @@ bool ConVar::SetColorFromString(const char* pszValue)
 			nRGBA[3] = 255;
 		}
 
-		if (nRGBA[0] >= 0 && nRGBA[0] <= 255 &&
-			nRGBA[1] >= 0 && nRGBA[1] <= 255 &&
-			nRGBA[2] >= 0 && nRGBA[2] <= 255 &&
-			nRGBA[3] >= 0 && nRGBA[3] <= 255)
+		if (nRGBA[0] >= 0 && nRGBA[0] <= 255 && nRGBA[1] >= 0 && nRGBA[1] <= 255 && nRGBA[2] >= 0 && nRGBA[2] <= 255 && nRGBA[3] >= 0 &&
+			nRGBA[3] <= 255)
 		{
-			//printf("*** WOW! Found a color!! ***\n");
+			// printf("*** WOW! Found a color!! ***\n");
 
 			// This is definitely a color!
 			bColor = true;
 
 			// Stuff all the values into each byte of our int.
-			unsigned char* pColorElement = ((unsigned char*)&m_nValue);
+			unsigned char* pColorElement = ((unsigned char*)&m_Value.m_nValue);
 			pColorElement[0] = nRGBA[0];
 			pColorElement[1] = nRGBA[1];
 			pColorElement[2] = nRGBA[2];
 			pColorElement[3] = nRGBA[3];
 
 			// Copy that value into our float.
-			m_flValue = (float)(m_nValue);
+			m_Value.m_fValue = (float)(m_Value.m_nValue);
 		}
 	}
 
 	return bColor;
 }
+
+//-----------------------------------------------------------------------------
+// Purpose: Checks if ConVar is registered.
+// Output : bool
+//-----------------------------------------------------------------------------
+bool ConVar::IsRegistered(void) const { return m_ConCommandBase.m_bRegistered; }
+
+//-----------------------------------------------------------------------------
+// Purpose: Returns true if this is a command
+// Output : bool
+//-----------------------------------------------------------------------------
+bool ConVar::IsCommand(void) const { return false; }
 
 //-----------------------------------------------------------------------------
 // Purpose: Test each ConVar query before setting the value.
@@ -484,20 +457,20 @@ bool ConVar::IsFlagSet(ConVar* pConVar, int nFlags)
 
 //-----------------------------------------------------------------------------
 // Purpose: Check whether to clamp and then perform clamp.
-// Input  : flValue - 
+// Input  : flValue -
 // Output : Returns true if value changed.
 //-----------------------------------------------------------------------------
 bool ConVar::ClampValue(float& flValue)
 {
-	if (m_bHasMin && (flValue < m_flMinValue))
+	if (m_bHasMin && (flValue < m_fMinVal))
 	{
-		flValue = m_flMinValue;
+		flValue = m_fMinVal;
 		return true;
 	}
 
-	if (m_bHasMax && (flValue > m_flMaxValue))
+	if (m_bHasMax && (flValue > m_fMaxVal))
 	{
-		flValue = m_flMaxValue;
+		flValue = m_fMaxVal;
 		return true;
 	}
 

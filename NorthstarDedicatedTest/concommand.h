@@ -1,6 +1,15 @@
 #pragma once
 
 // From Source SDK
+class ConCommandBase;
+class IConCommandBaseAccessor
+{
+  public:
+	// Flags is a combination of FCVAR flags in cvar.h.
+	// hOut is filled in with a handle to the variable.
+	virtual bool RegisterConCommandBase(ConCommandBase* pVar) = 0;
+};
+
 class CCommand
 {
   public:
@@ -48,41 +57,51 @@ inline const char* CCommand::operator[](int nIndex) const { return Arg(nIndex); 
 // From r5reloaded
 class ConCommandBase
 {
-public:
+  public:
+	bool HasFlags(int nFlags);
 	void AddFlags(int nFlags);
 	void RemoveFlags(int nFlags);
-	bool HasFlags(int nFlags);
-	//bool IsFlagSet(ConCommandBase* pCommandBase, int nFlags);
 
-	void* m_pConCommandBaseVTable;      //0x0000
-	ConCommandBase* m_pNext;            //0x0008
-	bool            m_bRegistered;      //0x0010
-	char            pad_0011[7];        //0x0011
-	const char*     m_pszName;          //0x0018
-	const char*     m_pszHelpString;    //0x0020
-	int             m_nFlags;           //0x0028
-	ConCommandBase* s_pConCommandBases; //0x002C
-	char            pad_0034[8];        //0x0034 <-- !TODO: IConCommandBaseAccessor
-}; //Size: 0x0040
+	bool IsCommand(void) const;
+	bool IsRegistered(void) const;
+	bool IsFlagSet(int nFlags) const;
+	static bool IsFlagSet(ConCommandBase* pCommandBase, int nFlags); // For hooking to engine's implementation.
+
+	int GetFlags(void) const;
+	ConCommandBase* GetNext(void) const;
+	const char* GetHelpText(void) const;
+
+	char* CopyString(const char* szFrom) const;
+
+	void* m_pConCommandBaseVTable;		  // 0x0000
+	ConCommandBase* m_pNext;			  // 0x0008
+	bool m_bRegistered;					  // 0x0010
+	char pad_0011[7];					  // 0x0011 <- 3 bytes padding + unk int32.
+	const char* m_pszName;				  // 0x0018
+	const char* m_pszHelpString;		  // 0x0020
+	int m_nFlags;						  // 0x0028
+	ConCommandBase* s_pConCommandBases;	  // 0x002C
+	IConCommandBaseAccessor* s_pAccessor; // 0x0034
+};										  // Size: 0x0040
 
 // taken from ttf2sdk
-class ConCommand
+class ConCommand : public ConCommandBase
 {
-	unsigned char unknown[0x68];
+	friend class CCVar;
 
   public:
-	virtual void EngineDestructor(void) {}
-	virtual bool IsCommand(void) const { return false; }
-	virtual bool IsFlagSet(int flag) { return false; }
-	virtual void AddFlags(int flags) {}
-	virtual void RemoveFlags(int flags) {}
-	virtual int GetFlags() const { return 0; }
-	virtual const char* GetName(void) const { return nullptr; }
-	virtual const char* GetHelpText(void) const { return nullptr; }
-	virtual bool IsRegistered(void) const { return false; }
-	// NOTE: there are more virtual methods here
-	// NOTE: Not using the engine's destructor here because it doesn't do anything useful for us
-};
+	ConCommand(void){}; // !TODO: Rebuild engine constructor in SDK instead.
+	ConCommand(const char* szName, const char* szHelpString, int nFlags, void* pCallback, void* pCommandCompletionCallback);
+	void Init(void);
+	bool IsCommand(void) const;
+
+	void* m_pCommandCallback{};	   // 0x0040 <- starts from 0x40 since we inherit ConCommandBase.
+	void* m_pCompletionCallback{}; // 0x0048 <- defaults to sub_180417410 ('xor eax, eax').
+	int m_nCallbackFlags{};		   // 0x0050
+	char pad_0054[4];			   // 0x0054
+	int unk0;					   // 0x0058
+	int unk1;					   // 0x005C
+};								   // Size: 0x0060
 
 void RegisterConCommand(const char* name, void (*callback)(const CCommand&), const char* helpString, int flags);
 void InitialiseConCommands(HMODULE baseAddress);
